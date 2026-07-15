@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
-import { Zap, Shield, Settings, Play, Square, Crosshair, Activity, Server, Clock, Layers, Cpu, X, Save, ArrowRight } from 'lucide-react'
+import { Zap, Shield, Settings, Play, Square, Crosshair, Activity, Server, Clock, Layers, Cpu, X, Save, ArrowRight, Terminal, Wifi, WifiOff } from 'lucide-react'
 import { MMBClient, StatsMessage } from './lib/mmb-client'
 
 type AnimState = 0 | 1 | 2 | 3
 
 const ATTACK_METHODS = [
-  { value: 'http_flood', label: 'HTTP Flood', desc: 'Rapid HTTP requests', color: 'from-red-500 to-orange-500', icon: Zap },
-  { value: 'http_bypass', label: 'HTTP Bypass', desc: 'Browser-mimicking traffic', color: 'from-purple-500 to-pink-500', icon: Shield },
-  { value: 'http_slowloris', label: 'Slowloris', desc: 'Slow persistent connections', color: 'from-blue-500 to-cyan-500', icon: Activity },
-  { value: 'tcp_flood', label: 'TCP Flood', desc: 'Raw TCP packet burst', color: 'from-green-500 to-emerald-500', icon: Server },
-  { value: 'minecraft_ping', label: 'MC Ping', desc: 'Minecraft protocol flood', color: 'from-yellow-500 to-amber-500', icon: Cpu },
+  { value: 'http_flood', label: 'HTTP FLOOD', icon: Zap, color: '#ef4444' },
+  { value: 'http_bypass', label: 'HTTP BYPASS', icon: Shield, color: '#a855f7' },
+  { value: 'http_slowloris', label: 'SLOWLORIS', icon: Activity, color: '#06b6d4' },
+  { value: 'tcp_flood', label: 'TCP FLOOD', icon: Server, color: '#22c55e' },
+  { value: 'minecraft_ping', label: 'MC PING', icon: Cpu, color: '#eab308' },
 ]
 
 function App() {
@@ -29,12 +29,10 @@ function App() {
   const [attackLogs, setAttackLogs] = useState<string[]>([])
 
   const clientRef = useRef<MMBClient | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     const client = new MMBClient()
     clientRef.current = client
-
     client.onConnect(() => setConnected(true))
     client.onDisconnect(() => setConnected(false))
     client.onStats((data) => {
@@ -43,72 +41,9 @@ function App() {
         setAttackLogs(prev => [...prev.slice(-50), `[${new Date().toLocaleTimeString()}] ${data.log}`])
       }
     })
-    client.onAttackEnd(() => {
-      setIsAttacking(false)
-      setAnimState(0)
-    })
-
+    client.onAttackEnd(() => { setIsAttacking(false); setAnimState(0) })
     return () => client.disconnect()
   }, [])
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
-
-    const particles: { x: number; y: number; vx: number; vy: number; size: number; color: string; alpha: number }[] = []
-    const colors = ['#06b6d4', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b']
-
-    const createParticle = () => {
-      particles.push({
-        x: Math.random() * canvas.width,
-        y: canvas.height + 10,
-        vx: (Math.random() - 0.5) * 2,
-        vy: -Math.random() * 3 - 1,
-        size: Math.random() * 3 + 1,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        alpha: 1,
-      })
-    }
-
-    let animFrame: number
-    const animate = () => {
-      ctx.fillStyle = 'rgba(5, 5, 15, 0.1)'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-      if (isAttacking) {
-        for (let i = 0; i < 3; i++) createParticle()
-      }
-
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i]
-        p.x += p.vx
-        p.y += p.vy
-        p.alpha -= 0.005
-
-        if (p.alpha <= 0 || p.y < -10) {
-          particles.splice(i, 1)
-          continue
-        }
-
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
-        ctx.fillStyle = p.color
-        ctx.globalAlpha = p.alpha
-        ctx.fill()
-        ctx.globalAlpha = 1
-      }
-
-      animFrame = requestAnimationFrame(animate)
-    }
-
-    animate()
-    return () => cancelAnimationFrame(animFrame)
-  }, [isAttacking])
 
   const loadConfiguration = async () => {
     try {
@@ -116,9 +51,7 @@ function App() {
       const data = await resp.json()
       setProxies(atob(data.proxies || ''))
       setUas(atob(data.uas || ''))
-    } catch (err) {
-      console.error('Failed to load config:', err)
-    }
+    } catch (err) { console.error(err) }
   }
 
   const saveConfiguration = async () => {
@@ -129,9 +62,7 @@ function App() {
         body: JSON.stringify({ proxies: btoa(proxies), uas: btoa(uas) }),
       })
       setShowSettings(false)
-    } catch (err) {
-      console.error('Failed to save config:', err)
-    }
+    } catch (err) { console.error(err) }
   }
 
   const startAttack = () => {
@@ -152,224 +83,230 @@ function App() {
     setAnimState(0)
   }
 
-  const getBgGradient = () => {
-    switch (animState) {
-      case 0: return 'radial-gradient(ellipse at 50% 0%, rgba(88,28,135,0.15) 0%, transparent 50%)'
-      case 1: return 'radial-gradient(ellipse at 50% 0%, rgba(30,64,175,0.25) 0%, transparent 50%)'
-      case 2: return 'radial-gradient(ellipse at 50% 0%, rgba(6,182,212,0.3) 0%, transparent 50%)'
-      case 3: return 'radial-gradient(ellipse at 50% 0%, rgba(236,72,153,0.35) 0%, transparent 50%)'
-      default: return 'radial-gradient(ellipse at 50% 0%, rgba(88,28,135,0.15) 0%, transparent 50%)'
-    }
-  }
+  const selectedMethod = ATTACK_METHODS.find(m => m.value === attackMethod)!
 
   return (
-    <div className="min-h-screen bg-[#050510] text-white overflow-hidden relative">
-      <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />
+    <div className="min-h-screen bg-black text-white relative overflow-hidden">
+      {/* Animated scanline overlay */}
+      <div className="scanlines" />
 
-      <div className="fixed inset-0 pointer-events-none z-0" style={{ background: getBgGradient(), transition: 'background 1s ease' }} />
+      {/* Floating particles */}
+      {isAttacking && (
+        <div className="fixed inset-0 pointer-events-none z-50">
+          {Array.from({ length: 30 }).map((_, i) => (
+            <div key={i} className="particle" style={{
+              left: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 4}s`,
+              animationDuration: `${2 + Math.random() * 3}s`,
+              background: selectedMethod.color,
+            }} />
+          ))}
+        </div>
+      )}
 
-      <div className={`relative z-10 min-h-screen ${animState === 3 ? 'animate-shake' : ''}`}>
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          {/* Header */}
-          <header className="text-center mb-8 relative">
-            <div className="inline-block mb-4">
-              <div className={`relative ${isAttacking ? 'animate-pulse' : ''}`}>
-                <img
-                  src="/gun.png"
-                  alt="GalaticBlast"
-                  className="w-28 h-28 mx-auto object-contain drop-shadow-[0_0_30px_rgba(139,92,246,0.5)]"
-                />
-                {isAttacking && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-32 h-32 rounded-full border-2 border-galactic-cyan animate-ping opacity-30" />
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Main layout */}
+      <div className={`relative z-10 min-h-screen flex flex-col ${animState === 3 ? 'animate-shake' : ''}`}>
 
-            <h1 className="text-5xl font-black tracking-tight mb-1">
-              <span className="bg-gradient-to-r from-galactic-cyan via-galactic-purple to-galactic-pink bg-clip-text text-transparent">
-                GALATICBLAST
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 bg-black/60" style={{ backdropFilter: 'blur(12px)' }}>
+          <div className="flex items-center gap-3">
+            <Terminal className="w-4 h-4 text-green-400" />
+            <span className="text-xs font-mono text-green-400 tracking-wider">GALATICBLAST v1.0.0</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              {connected ? <Wifi className="w-3.5 h-3.5 text-green-400" /> : <WifiOff className="w-3.5 h-3.5 text-red-500" />}
+              <span className={`text-xs font-mono ${connected ? 'text-green-400' : 'text-red-500'}`}>
+                {connected ? 'CONNECTED' : 'DISCONNECTED'}
               </span>
-            </h1>
-            <p className="text-gray-500 text-sm tracking-widest uppercase">Network Stress Testing Tool</p>
+            </div>
+            <button
+              onClick={() => { loadConfiguration(); setShowSettings(true) }}
+              className="p-1.5 rounded border border-white/10 hover:border-green-400/30 hover:bg-white/5 transition-all"
+            >
+              <Settings className="w-3.5 h-3.5 text-gray-400" />
+            </button>
+          </div>
+        </div>
 
-            <div className="flex items-center justify-center gap-6 mt-3">
-              <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]' : 'bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.6)]'} ${connected ? 'animate-pulse' : ''}`} />
-                <span className={`text-xs font-medium ${connected ? 'text-green-400' : 'text-red-400'}`}>
-                  {connected ? 'LIVE' : 'OFFLINE'}
+        {/* Hero section with gun image and controls overlaid */}
+        <div className="relative flex-1 flex flex-col items-center justify-center px-4 py-8">
+
+          {/* Gun image as background */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
+            <img
+              src="/gun.png"
+              alt=""
+              className="max-h-[70vh] max-w-[80vw] object-contain opacity-20"
+              style={{
+                filter: `drop-shadow(0 0 80px ${selectedMethod.color}40) drop-shadow(0 0 160px ${selectedMethod.color}20)`,
+                transition: 'filter 0.5s ease',
+              }}
+            />
+          </div>
+
+          {/* Glow ring behind controls when attacking */}
+          {isAttacking && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full pointer-events-none"
+              style={{
+                background: `radial-gradient(circle, ${selectedMethod.color}15 0%, transparent 70%)`,
+                animation: 'glowRing 2s ease-in-out infinite',
+              }}
+            />
+          )}
+
+          {/* Controls panel overlaid on image */}
+          <div className="relative z-20 w-full max-w-2xl">
+            {/* Title */}
+            <div className="text-center mb-6">
+              <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
+                <span className="bg-gradient-to-r from-green-400 via-cyan-400 to-purple-500 bg-clip-text text-transparent"
+                  style={{ textShadow: '0 0 40px rgba(34,197,94,0.3)' }}>
+                  GALATICBLAST
                 </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Crosshair className="w-3 h-3 text-galactic-purple" />
-                <span className="text-xs text-gray-500">v1.0.0</span>
+              </h1>
+              <div className="mt-1 h-[1px] bg-gradient-to-r from-transparent via-green-400/30 to-transparent" />
+            </div>
+
+            {/* Target input */}
+            <div className="mb-4 relative group">
+              <div className="absolute -inset-[1px] bg-gradient-to-r from-green-400/20 via-cyan-400/20 to-purple-500/20 rounded-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300" />
+              <div className="relative flex items-center bg-black/80 rounded-xl border border-white/10 overflow-hidden" style={{ backdropFilter: 'blur(12px)' }}>
+                <div className="px-4 py-4 border-r border-white/5">
+                  <Crosshair className="w-5 h-5 text-green-400" />
+                </div>
+                <input
+                  type="text"
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                  placeholder="target > http://example.com"
+                  className="flex-1 px-4 py-4 bg-transparent text-green-400 font-mono placeholder-green-400/30 focus:outline-none text-sm"
+                />
+                <div className="px-3">
+                  <span className="text-[10px] font-mono text-gray-600">L7</span>
+                </div>
               </div>
             </div>
-          </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {/* Left Column - Config */}
-            <div className="lg:col-span-2 space-y-5">
-              {/* Target Input */}
-              <div className="bg-[#0a0a1a]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/5 shadow-2xl">
-                <label className="block text-xs font-semibold text-gray-400 mb-2 tracking-wider uppercase">Target</label>
-                <div className="relative">
-                  <Crosshair className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-galactic-purple" />
+            {/* Attack method selector */}
+            <div className="mb-4 flex gap-1.5 p-1 bg-black/80 rounded-xl border border-white/10" style={{ backdropFilter: 'blur(12px)' }}>
+              {ATTACK_METHODS.map((method) => {
+                const Icon = method.icon
+                const isActive = attackMethod === method.value
+                return (
+                  <button
+                    key={method.value}
+                    onClick={() => setAttackMethod(method.value)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg transition-all duration-200 text-[11px] font-mono font-bold tracking-wider
+                      ${isActive
+                        ? 'text-black'
+                        : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                      }`}
+                    style={isActive ? {
+                      background: method.color,
+                      boxShadow: `0 0 20px ${method.color}40`,
+                    } : {}}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">{method.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Parameters row */}
+            <div className="mb-4 grid grid-cols-4 gap-2">
+              {[
+                { label: 'SIZE', value: packetSize, set: setPacketSize, icon: Layers },
+                { label: 'DUR', value: duration, set: setDuration, icon: Clock },
+                { label: 'DELAY', value: packetDelay, set: setPacketDelay, icon: Activity },
+                { label: 'THREADS', value: threads, set: setThreads, icon: Cpu },
+              ].map(({ label, value, set, icon: Icon }) => (
+                <div key={label} className="bg-black/80 rounded-lg border border-white/10 p-2.5" style={{ backdropFilter: 'blur(12px)' }}>
+                  <div className="flex items-center gap-1 mb-1">
+                    <Icon className="w-3 h-3 text-gray-600" />
+                    <span className="text-[9px] font-mono text-gray-600 tracking-wider">{label}</span>
+                  </div>
                   <input
-                    type="text"
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                    placeholder="http://example.com or 192.168.1.1:8080"
-                    className="w-full pl-12 pr-4 py-4 bg-[#0f0f2a] border border-white/5 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-galactic-purple/50 focus:border-galactic-purple/30 transition-all text-lg"
+                    type="number"
+                    value={value}
+                    onChange={(e) => set(Number(e.target.value))}
+                    className="w-full bg-transparent text-white font-mono font-bold text-lg focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
-              </div>
-
-              {/* Attack Methods */}
-              <div className="bg-[#0a0a1a]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/5 shadow-2xl">
-                <label className="block text-xs font-semibold text-gray-400 mb-3 tracking-wider uppercase">Attack Method</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {ATTACK_METHODS.map((method) => {
-                    const Icon = method.icon
-                    const isSelected = attackMethod === method.value
-                    return (
-                      <button
-                        key={method.value}
-                        onClick={() => setAttackMethod(method.value)}
-                        className={`relative p-3 rounded-xl border transition-all duration-300 text-left group
-                          ${isSelected
-                            ? 'bg-gradient-to-br ' + method.color + ' border-transparent shadow-lg scale-[1.02]'
-                            : 'bg-[#0f0f2a] border-white/5 hover:border-white/10 hover:bg-[#141430]'
-                          }`}
-                      >
-                        <Icon className={`w-5 h-5 mb-2 ${isSelected ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`} />
-                        <div className={`text-sm font-semibold ${isSelected ? 'text-white' : 'text-gray-300'}`}>{method.label}</div>
-                        <div className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/70' : 'text-gray-600'}`}>{method.desc}</div>
-                        {isSelected && (
-                          <div className="absolute top-2 right-2 w-2 h-2 bg-white rounded-full shadow-lg" />
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Parameters */}
-              <div className="bg-[#0a0a1a]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/5 shadow-2xl">
-                <label className="block text-xs font-semibold text-gray-400 mb-3 tracking-wider uppercase">Parameters</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { label: 'Packet Size', value: packetSize, set: setPacketSize, icon: Layers, suffix: 'B' },
-                    { label: 'Duration', value: duration, set: setDuration, icon: Clock, suffix: 's' },
-                    { label: 'Delay', value: packetDelay, set: setPacketDelay, icon: Activity, suffix: 'ms' },
-                    { label: 'Threads', value: threads, set: setThreads, icon: Cpu, suffix: '' },
-                  ].map(({ label, value, set, icon: Icon, suffix }) => (
-                    <div key={label} className="bg-[#0f0f2a] rounded-xl p-3 border border-white/5">
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Icon className="w-3.5 h-3.5 text-galactic-purple" />
-                        <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
-                      </div>
-                      <div className="flex items-baseline gap-1">
-                        <input
-                          type="number"
-                          value={value}
-                          onChange={(e) => set(Number(e.target.value))}
-                          className="w-full bg-transparent text-xl font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
-                        {suffix && <span className="text-xs text-gray-600">{suffix}</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Launch Button */}
-              <button
-                onClick={isAttacking ? stopAttack : startAttack}
-                disabled={!isAttacking && (!target || !connected)}
-                className={`w-full relative overflow-hidden rounded-2xl py-5 font-bold text-lg tracking-wide transition-all duration-500 disabled:opacity-30 disabled:cursor-not-allowed
-                  ${isAttacking
-                    ? 'bg-gradient-to-r from-red-600 via-red-500 to-red-600 hover:from-red-700 hover:via-red-600 hover:to-red-700'
-                    : 'bg-gradient-to-r from-galactic-cyan via-galactic-purple to-galactic-pink hover:shadow-[0_0_40px_rgba(139,92,246,0.4)] hover:scale-[1.01]'
-                  }`}
-              >
-                <div className="flex items-center justify-center gap-3">
-                  {isAttacking ? (
-                    <>
-                      <Square className="w-6 h-6" />
-                      <span>STOP ATTACK</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-6 h-6" fill="currentColor" />
-                      <span>LAUNCH GALATICBLAST</span>
-                      <ArrowRight className="w-5 h-5" />
-                    </>
-                  )}
-                </div>
-                {isAttacking && (
-                  <div className="absolute inset-0 bg-white/10 animate-pulse" />
-                )}
-              </button>
+              ))}
             </div>
 
-            {/* Right Column - Stats */}
-            <div className="space-y-5">
-              {/* Live Stats */}
-              <div className="bg-[#0a0a1a]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/5 shadow-2xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Live Statistics</h2>
-                  <div className={`w-2 h-2 rounded-full ${isAttacking ? 'bg-green-400 animate-pulse' : 'bg-gray-600'}`} />
-                </div>
-
-                <div className="space-y-3">
-                  <div className="bg-[#0f0f2a] rounded-xl p-4 border border-white/5">
-                    <div className="text-xs text-gray-500 mb-1">Packets / sec</div>
-                    <div className="text-3xl font-black text-galactic-cyan tabular-nums">{stats.pps.toLocaleString()}</div>
-                    <div className="mt-2 h-1 bg-white/5 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-galactic-cyan to-galactic-purple rounded-full transition-all duration-300"
-                        style={{ width: `${Math.min((stats.pps / 10000) * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="bg-[#0f0f2a] rounded-xl p-4 border border-white/5">
-                    <div className="text-xs text-gray-500 mb-1">Total Packets</div>
-                    <div className="text-3xl font-black text-galactic-purple tabular-nums">{stats.totalPackets.toLocaleString()}</div>
-                  </div>
-
-                  <div className="bg-[#0f0f2a] rounded-xl p-4 border border-white/5">
-                    <div className="text-xs text-gray-500 mb-1">Active Proxies</div>
-                    <div className="text-3xl font-black text-galactic-pink tabular-nums">{stats.proxies}</div>
-                  </div>
-                </div>
+            {/* Launch button */}
+            <button
+              onClick={isAttacking ? stopAttack : startAttack}
+              disabled={!isAttacking && (!target || !connected)}
+              className="w-full relative overflow-hidden rounded-xl py-4 font-mono font-bold text-sm tracking-[0.2em] transition-all duration-300 disabled:opacity-20 disabled:cursor-not-allowed border"
+              style={isAttacking ? {
+                background: `linear-gradient(135deg, ${selectedMethod.color}20, ${selectedMethod.color}40)`,
+                borderColor: selectedMethod.color,
+                color: selectedMethod.color,
+                boxShadow: `0 0 30px ${selectedMethod.color}30, inset 0 0 30px ${selectedMethod.color}10`,
+              } : {
+                background: 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(6,182,212,0.1))',
+                borderColor: 'rgba(34,197,94,0.3)',
+                color: '#4ade80',
+                boxShadow: '0 0 30px rgba(34,197,94,0.1)',
+              }}
+            >
+              <div className="flex items-center justify-center gap-3">
+                {isAttacking ? (
+                  <>
+                    <Square className="w-4 h-4" fill="currentColor" />
+                    <span>[ ABORT ]</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" fill="currentColor" />
+                    <span>[ EXECUTE ]</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </div>
+              {isAttacking && <div className="absolute inset-0 bg-white/5 animate-pulse pointer-events-none" />}
+            </button>
 
-              {/* Attack Log */}
-              <div className="bg-[#0a0a1a]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/5 shadow-2xl">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold text-gray-400 tracking-wider uppercase">Attack Log</h2>
-                  <button
-                    onClick={() => {
-                      loadConfiguration()
-                      setShowSettings(true)
-                    }}
-                    className="p-2 bg-[#0f0f2a] rounded-lg border border-white/5 hover:border-galactic-purple/30 transition-all"
-                  >
-                    <Settings className="w-4 h-4 text-gray-400" />
-                  </button>
+            {/* Stats bar */}
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {[
+                { label: 'PPS', value: stats.pps.toLocaleString(), color: '#06b6d4' },
+                { label: 'TOTAL', value: stats.totalPackets.toLocaleString(), color: '#a855f7' },
+                { label: 'PROXIES', value: stats.proxies.toString(), color: '#ec4899' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="bg-black/80 rounded-lg border border-white/10 px-3 py-2.5 flex items-center justify-between" style={{ backdropFilter: 'blur(12px)' }}>
+                  <span className="text-[9px] font-mono text-gray-600 tracking-wider">{label}</span>
+                  <span className="text-sm font-mono font-bold tabular-nums" style={{ color }}>{value}</span>
                 </div>
-                <div className="bg-[#080818] rounded-xl p-3 h-48 overflow-y-auto font-mono text-xs border border-white/5">
-                  {attackLogs.length === 0 ? (
-                    <div className="text-gray-600 text-center mt-16">No activity yet</div>
-                  ) : (
-                    attackLogs.map((log, i) => (
-                      <div key={i} className="text-galactic-cyan/80 py-0.5 leading-relaxed">{log}</div>
-                    ))
-                  )}
+              ))}
+            </div>
+
+            {/* Log terminal */}
+            <div className="mt-4 bg-black/90 rounded-xl border border-white/10 overflow-hidden" style={{ backdropFilter: 'blur(12px)' }}>
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5">
+                <div className="flex gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
                 </div>
+                <span className="text-[9px] font-mono text-gray-600">galaticblast@terminal</span>
+              </div>
+              <div className="p-3 h-28 overflow-y-auto font-mono text-[11px] leading-relaxed">
+                {attackLogs.length === 0 ? (
+                  <div className="text-green-400/30">
+                    <span className="text-green-400/50">$</span> waiting for commands...
+                  </div>
+                ) : (
+                  attackLogs.map((log, i) => (
+                    <div key={i} className="text-green-400/70">
+                      <span className="text-green-400/40">$</span> {log}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -378,52 +315,48 @@ function App() {
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0a0a1a] rounded-2xl p-6 border border-white/10 w-full max-w-2xl shadow-2xl">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-bold text-white">Configuration</h2>
-              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-white/5 rounded-lg transition-all">
-                <X className="w-5 h-5 text-gray-400" />
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4" style={{ backdropFilter: 'blur(8px)' }}>
+          <div className="bg-[#0a0a0a] rounded-xl border border-green-400/20 w-full max-w-2xl shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-green-400" />
+                <h2 className="text-sm font-mono font-bold text-green-400 tracking-wider">CONFIGURATION</h2>
+              </div>
+              <button onClick={() => setShowSettings(false)} className="p-1.5 hover:bg-white/5 rounded-lg transition-all">
+                <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
-
-            <div className="space-y-4">
+            <div className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-2 tracking-wider uppercase">Proxies</label>
+                <label className="block text-[10px] font-mono text-gray-500 mb-2 tracking-wider">PROXIES</label>
                 <textarea
                   value={proxies}
                   onChange={(e) => setProxies(e.target.value)}
                   rows={5}
-                  className="w-full px-4 py-3 bg-[#0f0f2a] border border-white/5 rounded-xl text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-galactic-purple/50 resize-none"
-                  placeholder="http://proxy1:8080&#10;socks5://proxy2:1080"
+                  className="w-full px-4 py-3 bg-black border border-white/10 rounded-lg text-green-400 font-mono text-xs focus:outline-none focus:border-green-400/30 resize-none"
+                  placeholder={"http://proxy1:8080\nsocks5://proxy2:1080"}
                 />
               </div>
-
               <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-2 tracking-wider uppercase">User Agents</label>
+                <label className="block text-[10px] font-mono text-gray-500 mb-2 tracking-wider">USER AGENTS</label>
                 <textarea
                   value={uas}
                   onChange={(e) => setUas(e.target.value)}
                   rows={5}
-                  className="w-full px-4 py-3 bg-[#0f0f2a] border border-white/5 rounded-xl text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-galactic-purple/50 resize-none"
-                  placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64)..."
+                  className="w-full px-4 py-3 bg-black border border-white/10 rounded-lg text-green-400 font-mono text-xs focus:outline-none focus:border-green-400/30 resize-none"
+                  placeholder="Mozilla/5.0 ..."
                 />
               </div>
             </div>
-
-            <div className="flex gap-3 mt-5">
-              <button
-                onClick={saveConfiguration}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-galactic-cyan to-galactic-purple text-white font-bold rounded-xl hover:shadow-lg transition-all"
-              >
-                <Save className="w-4 h-4" />
-                Save Configuration
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={saveConfiguration}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-400/10 border border-green-400/30 text-green-400 font-mono font-bold text-xs tracking-wider rounded-lg hover:bg-green-400/20 transition-all">
+                <Save className="w-3.5 h-3.5" />
+                SAVE
               </button>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="px-4 py-3 bg-[#0f0f2a] border border-white/5 text-gray-400 rounded-xl hover:bg-white/5 transition-all"
-              >
-                Cancel
+              <button onClick={() => setShowSettings(false)}
+                className="px-4 py-3 bg-white/5 border border-white/10 text-gray-400 font-mono text-xs rounded-lg hover:bg-white/10 transition-all">
+                CANCEL
               </button>
             </div>
           </div>
