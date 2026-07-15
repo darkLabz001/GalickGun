@@ -1,0 +1,7 @@
+# GalaticBlast Sample Proxies
+# Format: protocol://host:port
+# Supported protocols: http, https, socks4, socks5
+
+# Add your proxies below:
+# http://proxy1.example.com:8080
+# socks5://proxy2.example.com:1080
