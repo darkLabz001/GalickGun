@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client'
 
-type StartAttackPayload = {
+export type StartAttackPayload = {
   target: string
   attackMethod: string
   packetSize: number
@@ -21,8 +21,16 @@ export class MMBClient {
   private socket: Socket
 
   constructor() {
-    this.socket = io(window.location.origin, {
+    const url = window.location.protocol + '//' + window.location.hostname + ':3000'
+    this.socket = io(url, {
       transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+    })
+
+    this.socket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err.message)
     })
   }
 
