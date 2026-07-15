@@ -64,6 +64,12 @@ function App() {
   const logEndRef = useRef<HTMLDivElement>(null)
   const launchAudioRef = useRef<HTMLAudioElement>(null)
 
+  const stopLaunchSound = () => {
+    if (!launchAudioRef.current) return
+    launchAudioRef.current.pause()
+    launchAudioRef.current.currentTime = 0
+  }
+
   useEffect(() => {
     const client = new MMBClient()
     clientRef.current = client
@@ -77,6 +83,7 @@ function App() {
       }
     })
     client.onAttackEnd(() => {
+      stopLaunchSound()
       setIsAttacking(false)
       setIsLaunching(false)
       setAttackLogs((previous) => [...previous, 'Session completed.'])
@@ -88,6 +95,7 @@ function App() {
         setAttackLogs((previous) => [...previous, `Core accepted session with ${response.proxies} compatible proxies.`])
         return
       }
+      stopLaunchSound()
       setIsAttacking(false)
       setAttackLogs((previous) => [...previous, `Session rejected: ${response.message || 'request was not accepted'}`])
     })
@@ -104,6 +112,7 @@ function App() {
   useEffect(() => {
     if (!isLaunching) return
     const timeout = window.setTimeout(() => {
+      stopLaunchSound()
       setIsLaunching(false)
       setAttackLogs((previous) => [...previous, 'Galick core did not acknowledge the launch. Check the server connection and try again.'])
     }, 6000)
@@ -166,7 +175,8 @@ function App() {
 
   const stopAttack = () => {
     if (!clientRef.current) return
-    clientRef.current.stopAttack()
+    stopLaunchSound()
+    void clientRef.current.stopAttack()
     setIsAttacking(false)
     setIsLaunching(false)
     setAttackLogs((previous) => [...previous, 'Session aborted by operator.'])
@@ -176,6 +186,13 @@ function App() {
     setStats(initialStats)
     setAttackLogs([])
     setElapsed(0)
+  }
+
+  const toggleSound = () => {
+    setSoundEnabled((enabled) => {
+      if (enabled) stopLaunchSound()
+      return !enabled
+    })
   }
 
   const selectedMethod = ATTACK_METHODS.find((method) => method.value === attackMethod)!
@@ -203,7 +220,7 @@ function App() {
             <span>{connected ? 'CORE ONLINE' : 'CORE OFFLINE'}</span>
           </div>
           <span className="version-tag">BUILD 1.0.0</span>
-          <button className="icon-button" onClick={() => setSoundEnabled((enabled) => !enabled)} title={`${soundEnabled ? 'Disable' : 'Enable'} Galick Gun launch sound`} aria-label={`${soundEnabled ? 'Disable' : 'Enable'} launch sound`}>
+          <button className="icon-button" onClick={toggleSound} title={`${soundEnabled ? 'Disable' : 'Enable'} Galick Gun launch sound`} aria-label={`${soundEnabled ? 'Disable' : 'Enable'} launch sound`}>
             {soundEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
           </button>
           <button className="icon-button" onClick={openSettings} title="Open configuration" aria-label="Open configuration">

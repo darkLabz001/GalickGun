@@ -1,12 +1,17 @@
 package api
 
 type StartAttackRequest struct {
+	ClientID     string `json:"clientId"`
 	Target       string `json:"target"`
 	AttackMethod string `json:"attackMethod"`
 	DurationSec  int    `json:"duration"`
 	PacketDelay  int    `json:"packetDelay"`
 	PacketSize   int    `json:"packetSize"`
 	Threads      int    `json:"threads"`
+}
+
+type StopAttackRequest struct {
+	ClientID string `json:"clientId"`
 }
 
 type ConfigurationResponse struct {

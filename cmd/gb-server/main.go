@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/galaticBlast/galaticBlast/internal/attacks/game"
 	httpattacks "github.com/galaticBlast/galaticBlast/internal/attacks/http"
@@ -16,8 +15,6 @@ import (
 	"github.com/galaticBlast/galaticBlast/internal/engine"
 	"github.com/galaticBlast/galaticBlast/internal/proxy"
 	"github.com/galaticBlast/galaticBlast/pkg/api"
-	"github.com/galaticBlast/galaticBlast/pkg/target"
-	socketio "github.com/googollee/go-socket.io"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/rs/zerolog/log"
@@ -44,131 +41,7 @@ func main() {
 		userAgents = []string{"GalickGun/1.0"}
 	}
 
-	ioServer := socketio.NewServer(nil)
-
-	ioServer.OnConnect("/", func(s socketio.Conn) error {
-		s.SetContext("")
-		log.Info().Str("id", s.ID()).Msg("client connected")
-
-		s.Emit("stats", api.StatsPayload{
-			PPS:     0,
-			Proxies: len(proxies),
-			Log:     "Connected to GalickGun",
-		})
-		return nil
-	})
-
-	ioServer.OnError("/", func(s socketio.Conn, err error) {
-		log.Error().Err(err).Str("id", socketConnectionID(s)).Msg("socket.io error")
-	})
-
-	ioServer.OnEvent("/", "startAttack", func(s socketio.Conn, payload api.StartAttackRequest) {
-		log.Info().
-			Str("target", payload.Target).
-			Str("method", payload.AttackMethod).
-			Msg("attack requested")
-
-		if err := api.ValidateStartAttackRequest(payload); err != nil {
-			s.Emit("attackAccepted", api.AttackAcceptedResponse{
-				OK:      false,
-				Message: err.Error(),
-			})
-			return
-		}
-
-		method := engine.AttackKind(payload.AttackMethod)
-		filteredProxies := proxy.FilterByMethod(proxies, method)
-
-		if len(filteredProxies) == 0 && len(proxies) > 0 {
-			s.Emit("attackAccepted", api.AttackAcceptedResponse{
-				OK:      false,
-				Proxies: 0,
-			})
-			return
-		}
-
-		targetNode := target.ParseTarget(payload.Target)
-
-		duration := time.Duration(payload.DurationSec) * time.Second
-		if duration == 0 {
-			duration = 30 * time.Second
-		}
-
-		packetDelay := time.Duration(payload.PacketDelay) * time.Millisecond
-		if packetDelay == 0 {
-			packetDelay = 100 * time.Millisecond
-		}
-
-		packetSize := payload.PacketSize
-		if packetSize == 0 {
-			packetSize = 64
-		}
-
-		threads := payload.Threads
-		if threads == 0 {
-			threads = 4
-		}
-
-		params := engine.AttackParams{
-			Target:      payload.Target,
-			TargetNode:  targetNode,
-			Duration:    duration,
-			PacketDelay: packetDelay,
-			PacketSize:  packetSize,
-			Method:      method,
-			Threads:     threads,
-			Verbose:     true,
-		}
-
-		attackID := "client-" + s.ID()
-		eng.Stop(attackID)
-
-		instance := eng.Start(attackID, params, filteredProxies, userAgents)
-		if instance == nil {
-			s.Emit("attackAccepted", api.AttackAcceptedResponse{
-				OK:      false,
-				Proxies: len(filteredProxies),
-			})
-			return
-		}
-
-		s.Emit("attackAccepted", api.AttackAcceptedResponse{
-			OK:      true,
-			Proxies: len(filteredProxies),
-		})
-
-		go func() {
-			for stats := range instance.StatsCh {
-				s.Emit("stats", api.StatsPayload{
-					Timestamp:    stats.Timestamp.Unix(),
-					PPS:          stats.PacketsPerS,
-					TotalPackets: stats.TotalPackets,
-					Proxies:      stats.Proxies,
-					Log:          stats.Log,
-				})
-			}
-			s.Emit("attackEnd")
-		}()
-	})
-
-	ioServer.OnEvent("/", "stopAttack", func(s socketio.Conn) {
-		attackID := "client-" + s.ID()
-		eng.Stop(attackID)
-		s.Emit("attackEnd")
-	})
-
-	ioServer.OnDisconnect("/", func(s socketio.Conn, reason string) {
-		log.Info().Str("id", s.ID()).Str("reason", reason).Msg("client disconnected")
-		attackID := "client-" + s.ID()
-		eng.Stop(attackID)
-	})
-
-	go func() {
-		if err := ioServer.Serve(); err != nil {
-			log.Fatal().Err(err).Msg("socket.io server failed")
-		}
-	}()
-	defer ioServer.Close()
+	control := newControlServer(eng, proxies, userAgents)
 
 	e := echo.New()
 	e.Use(middleware.Logger())
@@ -179,7 +52,9 @@ func main() {
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, "*"},
 	}))
 
-	e.Any("/socket.io/*", echo.WrapHandler(ioServer))
+	e.POST("/api/attacks/start", control.start)
+	e.POST("/api/attacks/stop", control.stop)
+	e.GET("/api/events", control.stream)
 
 	e.GET("/attacks", func(c echo.Context) error {
 		kinds := eng.Registry().ListKinds()
@@ -237,11 +112,4 @@ func registerWorkers(reg *engine.Registry) {
 	reg.Register(engine.HTTPSlowloris, httpattacks.NewSlowlorisWorker())
 	reg.Register(engine.TCPFlood, tcp.NewFloodWorker())
 	reg.Register(engine.MinecraftPing, game.NewMinecraftPingWorker())
-}
-
-func socketConnectionID(conn socketio.Conn) string {
-	if conn == nil {
-		return ""
-	}
-	return conn.ID()
 }

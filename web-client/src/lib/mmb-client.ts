@@ -1,5 +1,3 @@
-import io from 'socket.io-client'
-
 export type StartAttackPayload = {
   target: string
   attackMethod: string
@@ -23,51 +21,84 @@ export type AttackAcceptedMessage = {
   message?: string
 }
 
+type ControlEvent =
+  | { type: 'ready' }
+  | { type: 'stats'; data: StatsMessage }
+  | { type: 'attackEnd' }
+
+function createClientID() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return `client-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 export class MMBClient {
-  private socket: SocketIOClient.Socket
+  private readonly clientID = createClientID()
+  private readonly events: EventSource
+  private connectCallbacks: Array<() => void> = []
+  private disconnectCallbacks: Array<() => void> = []
+  private statsCallbacks: Array<(data: StatsMessage) => void> = []
+  private attackEndCallbacks: Array<() => void> = []
+  private attackAcceptedCallbacks: Array<(data: AttackAcceptedMessage) => void> = []
 
   constructor() {
-    this.socket = io(window.location.origin, {
-      forceNew: true,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-    })
-
-    this.socket.on('connect_error', (err: Error) => {
-      console.error('Socket connection error:', err.message)
-    })
+    this.events = new EventSource(`/api/events?clientId=${encodeURIComponent(this.clientID)}`)
+    this.events.onopen = () => this.connectCallbacks.forEach((callback) => callback())
+    this.events.onerror = () => this.disconnectCallbacks.forEach((callback) => callback())
+    this.events.onmessage = (message) => {
+      const event = JSON.parse(message.data) as ControlEvent
+      if (event.type === 'stats') this.statsCallbacks.forEach((callback) => callback(event.data))
+      if (event.type === 'attackEnd') this.attackEndCallbacks.forEach((callback) => callback())
+    }
   }
 
   onConnect(callback: () => void) {
-    this.socket.on('connect', callback)
+    this.connectCallbacks.push(callback)
   }
 
   onDisconnect(callback: () => void) {
-    this.socket.on('disconnect', callback)
+    this.disconnectCallbacks.push(callback)
   }
 
   onStats(callback: (data: StatsMessage) => void) {
-    this.socket.on('stats', callback)
+    this.statsCallbacks.push(callback)
   }
 
   onAttackEnd(callback: () => void) {
-    this.socket.on('attackEnd', callback)
+    this.attackEndCallbacks.push(callback)
   }
 
   onAttackAccepted(callback: (data: AttackAcceptedMessage) => void) {
-    this.socket.on('attackAccepted', callback)
+    this.attackAcceptedCallbacks.push(callback)
   }
 
-  startAttack(payload: StartAttackPayload) {
-    this.socket.emit('startAttack', payload)
+  async startAttack(payload: StartAttackPayload) {
+    try {
+      const response = await fetch('/api/attacks/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, clientId: this.clientID }),
+      })
+      const result = await response.json() as AttackAcceptedMessage
+      this.attackAcceptedCallbacks.forEach((callback) => callback(result))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'control request failed'
+      this.attackAcceptedCallbacks.forEach((callback) => callback({ ok: false, proxies: 0, message }))
+    }
   }
 
-  stopAttack() {
-    this.socket.emit('stopAttack')
+  async stopAttack() {
+    try {
+      await fetch('/api/attacks/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: this.clientID }),
+      })
+    } catch (error) {
+      console.error('Failed to stop test:', error)
+    }
   }
 
   disconnect() {
-    this.socket.disconnect()
+    this.events.close()
   }
 }

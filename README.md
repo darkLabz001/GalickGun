@@ -8,7 +8,7 @@
 
 <p align="center">
   A professional network stress testing tool with a web-based UI and CLI interface.
-  Built with Go backend, React frontend, and real-time Socket.IO communication.
+  Built with a Go backend, React frontend, REST control API, and live SSE telemetry.
 </p>
 
 ---

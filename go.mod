@@ -3,7 +3,6 @@ module github.com/galaticBlast/galaticBlast
 go 1.26.5
 
 require (
-	github.com/googollee/go-socket.io v1.7.0
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/rs/zerolog v1.35.1
@@ -12,9 +11,6 @@ require (
 )
 
 require (
-	github.com/gofrs/uuid v4.0.0+incompatible // indirect
-	github.com/gomodule/redigo v1.8.4 // indirect
-	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
