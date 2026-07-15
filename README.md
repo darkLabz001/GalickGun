@@ -1,10 +1,10 @@
-# GalaticBlast
+# GalickGun
 
 <p align="center">
-  <img src="web-client/public/gun.png" alt="GalaticBlast" width="128" />
+  <img src="web-client/public/gun.png" alt="GalickGun Vegeta-themed dashboard artwork" width="256" />
 </p>
 
-<h3 align="center">Network Stress Testing Tool</h3>
+<h3 align="center">Vegeta-Themed Authorized Network Load Testing Tool</h3>
 
 <p align="center">
   A professional network stress testing tool with a web-based UI and CLI interface.
@@ -39,34 +39,34 @@ make all
 
 # Or manually:
 cd web-client && npm install && npm run build && cd ..
-go build -o bin/gb-server ./cmd/gb-server
-go build -o bin/gb-cli ./cmd/gb-cli
+go build -o bin/galickgun-server ./cmd/gb-server
+go build -o bin/galickgun-cli ./cmd/gb-cli
 ```
 
 ### Run the web server
 
 ```bash
-./bin/gb-server
+./bin/galickgun-server
 # Open http://localhost:3000
 ```
 
 ### Run the CLI
 
 ```bash
-./bin/gb-cli attack http_flood http://target.com -d 30 -s 64 -t 4 -v
+./bin/galickgun-cli attack http_flood http://target.com -d 30 -s 64 -t 4 -v
 ```
 
 ### Docker
 
 ```bash
-docker build -t galaticblast .
-docker run -p 3000:3000 galaticblast
+docker build -t galickgun .
+docker run -p 3000:3000 galickgun
 ```
 
 ## CLI Usage
 
 ```
-gb-cli attack [method] [target] [flags]
+galickgun-cli attack [method] [target] [flags]
 
 Flags:
   -d, --duration int    Attack duration in seconds (default 30)
@@ -97,6 +97,7 @@ Flags:
 ```toml
 proxies_file = "data/proxies.txt"
 user_agents_file = "data/uas.txt"
+server_host = "127.0.0.1"
 server_port = 3000
 allowed_origin = "http://localhost:5173"
 ```
@@ -114,7 +115,18 @@ host
 
 | Variable | Effect |
 |----------|--------|
-| `ALLOW_NO_PROXY=true` | Allow attacks without proxies |
+| `GB_SERVER_HOST=0.0.0.0` | Explicitly expose the web server beyond loopback (Docker sets this automatically) |
+
+The server binds to `127.0.0.1` by default. Only expose it on a trusted network;
+the web console can start tests and edit proxy configuration.
+
+### Quality checks
+
+```bash
+make check
+```
+
+This runs the race-enabled Go test suite, `go vet`, and the complete Go/React build.
 
 ## Project Structure
 

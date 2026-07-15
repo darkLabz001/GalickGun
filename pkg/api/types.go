@@ -1,12 +1,12 @@
 package api
 
 type StartAttackRequest struct {
-	Target      string `json:"target"`
+	Target       string `json:"target"`
 	AttackMethod string `json:"attackMethod"`
-	DurationSec int    `json:"duration"`
-	PacketDelay int    `json:"packetDelay"`
-	PacketSize  int    `json:"packetSize"`
-	Threads     int    `json:"threads"`
+	DurationSec  int    `json:"duration"`
+	PacketDelay  int    `json:"packetDelay"`
+	PacketSize   int    `json:"packetSize"`
+	Threads      int    `json:"threads"`
 }
 
 type ConfigurationResponse struct {
@@ -27,6 +27,7 @@ type AttackListResponse struct {
 }
 
 type AttackAcceptedResponse struct {
-	OK       bool `json:"ok"`
-	Proxies  int  `json:"proxies"`
+	OK      bool   `json:"ok"`
+	Proxies int    `json:"proxies"`
+	Message string `json:"message,omitempty"`
 }

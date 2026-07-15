@@ -1,14 +1,45 @@
-import { useState, useEffect, useRef } from 'react'
-import { Zap, Shield, Settings, Play, Square, Crosshair, Activity, Server, Clock, Layers, Cpu, X, Save, Terminal, RotateCcw } from 'lucide-react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import {
+  Activity,
+  Check,
+  ChevronRight,
+  Clock3,
+  Crosshair,
+  Cpu,
+  Gauge,
+  Layers3,
+  Play,
+  Radio,
+  RotateCcw,
+  Save,
+  Server,
+  Settings,
+  Shield,
+  Square,
+  Terminal,
+  Volume2,
+  VolumeX,
+  Wifi,
+  X,
+  Zap,
+} from 'lucide-react'
 import { MMBClient, StatsMessage } from './lib/mmb-client'
 
 const ATTACK_METHODS = [
-  { value: 'http_flood', label: 'HTTP FLOOD', icon: Zap, color: '#ef4444' },
-  { value: 'http_bypass', label: 'HTTP BYPASS', icon: Shield, color: '#a855f7' },
-  { value: 'http_slowloris', label: 'SLOWLORIS', icon: Activity, color: '#06b6d4' },
-  { value: 'tcp_flood', label: 'TCP FLOOD', icon: Server, color: '#22c55e' },
-  { value: 'minecraft_ping', label: 'MC PING', icon: Cpu, color: '#eab308' },
+  { value: 'http_flood', label: 'HTTP Flood', short: 'L7', detail: 'Galick pressure wave', icon: Zap, color: '#b56cff' },
+  { value: 'http_bypass', label: 'HTTP Bypass', short: 'L7', detail: 'Royal guard rotation', icon: Shield, color: '#7c5cff' },
+  { value: 'http_slowloris', label: 'Slowloris', short: 'L7', detail: 'Sustained ki channel', icon: Activity, color: '#d946ef' },
+  { value: 'tcp_flood', label: 'TCP Flood', short: 'L4', detail: 'Saiyan burst output', icon: Server, color: '#3b82f6' },
+  { value: 'minecraft_ping', label: 'MC Ping', short: 'GAME', detail: 'Scouter handshake', icon: Cpu, color: '#f6c453' },
 ]
+
+const initialStats: StatsMessage = { pps: 0, totalPackets: 0, proxies: 0, log: '', timestamp: 0 }
+
+function formatElapsed(seconds: number) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0')
+  const remainder = (seconds % 60).toString().padStart(2, '0')
+  return `${minutes}:${remainder}`
+}
 
 function App() {
   const [target, setTarget] = useState('')
@@ -18,16 +49,20 @@ function App() {
   const [packetDelay, setPacketDelay] = useState(100)
   const [threads, setThreads] = useState(4)
   const [isAttacking, setIsAttacking] = useState(false)
-  const [stats, setStats] = useState<StatsMessage>({ pps: 0, totalPackets: 0, proxies: 0, log: '', timestamp: 0 })
+  const [isLaunching, setIsLaunching] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const [stats, setStats] = useState<StatsMessage>(initialStats)
   const [connected, setConnected] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [proxies, setProxies] = useState('')
   const [uas, setUas] = useState('')
   const [attackLogs, setAttackLogs] = useState<string[]>([])
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [soundEnabled, setSoundEnabled] = useState(true)
 
   const clientRef = useRef<MMBClient | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
+  const launchAudioRef = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
     const client = new MMBClient()
@@ -38,45 +73,73 @@ function App() {
     client.onStats((data) => {
       setStats(data)
       if (data.log && !data.log.includes('Connected')) {
-        setAttackLogs(prev => [...prev.slice(-100), data.log])
+        setAttackLogs((previous) => [...previous.slice(-99), data.log])
       }
     })
     client.onAttackEnd(() => {
       setIsAttacking(false)
-      setAttackLogs(prev => [...prev, 'Attack completed.'])
+      setIsLaunching(false)
+      setAttackLogs((previous) => [...previous, 'Session completed.'])
+    })
+    client.onAttackAccepted((response) => {
+      setIsLaunching(false)
+      if (response.ok) {
+        setIsAttacking(true)
+        setAttackLogs((previous) => [...previous, `Core accepted session with ${response.proxies} compatible proxies.`])
+        return
+      }
+      setIsAttacking(false)
+      setAttackLogs((previous) => [...previous, `Session rejected: ${response.message || 'request was not accepted'}`])
     })
 
     return () => client.disconnect()
   }, [])
 
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (!isAttacking) return
+    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000)
+    return () => window.clearInterval(timer)
+  }, [isAttacking])
+
+  useEffect(() => {
+    if (!isLaunching) return
+    const timeout = window.setTimeout(() => {
+      setIsLaunching(false)
+      setAttackLogs((previous) => [...previous, 'Galick core did not acknowledge the launch. Check the server connection and try again.'])
+    }, 6000)
+    return () => window.clearTimeout(timeout)
+  }, [isLaunching])
+
+  useEffect(() => {
+    if (attackLogs.length > 0) {
+      logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
   }, [attackLogs])
 
   const loadConfiguration = async () => {
     try {
-      const resp = await fetch('/configuration')
-      const data = await resp.json()
+      const response = await fetch('/configuration')
+      if (!response.ok) throw new Error(`Configuration request failed (${response.status})`)
+      const data = await response.json()
       setProxies(atob(data.proxies || ''))
       setUas(atob(data.uas || ''))
-    } catch (err) {
-      console.error('Failed to load config:', err)
+    } catch (error) {
+      console.error('Failed to load config:', error)
     }
   }
 
   const saveConfiguration = async () => {
     try {
-      const resp = await fetch('/configuration', {
+      const response = await fetch('/configuration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proxies: btoa(proxies), uas: btoa(uas) }),
       })
-      if (resp.ok) {
-        setSettingsSaved(true)
-        setTimeout(() => setSettingsSaved(false), 2000)
-      }
-    } catch (err) {
-      console.error('Failed to save config:', err)
+      if (!response.ok) throw new Error(`Configuration save failed (${response.status})`)
+      setSettingsSaved(true)
+      window.setTimeout(() => setSettingsSaved(false), 2000)
+    } catch (error) {
+      console.error('Failed to save config:', error)
     }
   }
 
@@ -87,323 +150,231 @@ function App() {
   }
 
   const startAttack = () => {
-    if (!target || !clientRef.current) return
-    setAttackLogs(['Initializing attack...'])
-    clientRef.current.startAttack({ target, attackMethod, packetSize, duration, packetDelay, threads })
-    setIsAttacking(true)
+    const normalizedTarget = target.trim()
+    if (!normalizedTarget || !clientRef.current || !connected) return
+    setTarget(normalizedTarget)
+    setElapsed(0)
+    setStats((previous) => ({ ...previous, pps: 0, totalPackets: 0, log: '' }))
+    setAttackLogs([`Target acquired: ${normalizedTarget}`, `Charging ${selectedMethod.label} profile...`, 'Galick core initialized.'])
+    if (soundEnabled && launchAudioRef.current) {
+      launchAudioRef.current.currentTime = 0
+      void launchAudioRef.current.play().catch(() => undefined)
+    }
+    clientRef.current.startAttack({ target: normalizedTarget, attackMethod, packetSize, duration, packetDelay, threads })
+    setIsLaunching(true)
   }
 
   const stopAttack = () => {
     if (!clientRef.current) return
     clientRef.current.stopAttack()
     setIsAttacking(false)
-    setAttackLogs(prev => [...prev, 'Attack aborted by user.'])
+    setIsLaunching(false)
+    setAttackLogs((previous) => [...previous, 'Session aborted by operator.'])
   }
 
   const resetStats = () => {
-    setStats({ pps: 0, totalPackets: 0, proxies: 0, log: '', timestamp: 0 })
+    setStats(initialStats)
     setAttackLogs([])
+    setElapsed(0)
   }
 
-  const selectedMethod = ATTACK_METHODS.find(m => m.value === attackMethod)!
+  const selectedMethod = ATTACK_METHODS.find((method) => method.value === attackMethod)!
+  const progress = isAttacking ? Math.min((elapsed / Math.max(duration, 1)) * 100, 100) : 0
+  const proxyCount = proxies.split('\n').filter((line) => line.trim() && !line.startsWith('#')).length
+  const userAgentCount = uas.split('\n').filter((line) => line.trim() && !line.startsWith('#')).length
+  const appStyle = { '--accent': selectedMethod.color } as CSSProperties
 
   return (
-    <div className="min-h-screen bg-black text-white relative overflow-hidden">
-      {/* Background gradient orbs */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full opacity-[0.03]"
-          style={{ background: `radial-gradient(circle, ${selectedMethod.color}, transparent)`, transition: 'background 1s' }} />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 rounded-full opacity-[0.03]"
-          style={{ background: `radial-gradient(circle, #8b5cf6, transparent)` }} />
-      </div>
+    <div className={`app-shell ${isLaunching ? 'is-charging' : ''} ${isAttacking ? 'is-firing' : ''}`} style={appStyle}>
+      <div className="noise-layer" aria-hidden="true" />
+      <audio ref={launchAudioRef} src="/galick-gun.mp3" preload="auto" />
 
-      {/* Scanlines */}
-      <div className="scanlines" />
-
-      {/* Attack particles */}
-      {isAttacking && (
-        <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
-          {Array.from({ length: 25 }).map((_, i) => (
-            <div key={i} className="particle" style={{
-              left: `${5 + Math.random() * 90}%`,
-              animationDelay: `${Math.random() * 4}s`,
-              animationDuration: `${2 + Math.random() * 3}s`,
-              background: `linear-gradient(to top, transparent, ${selectedMethod.color})`,
-            }} />
-          ))}
+      <header className="topbar">
+        <div className="brand-lockup">
+          <div className="brand-mark"><Zap size={17} /></div>
+          <div>
+            <strong>GALICK<span>GUN</span></strong>
+            <small>SAIYAN LOAD CONSOLE</small>
+          </div>
         </div>
-      )}
-
-      {/* Main layout */}
-      <div className={`relative z-10 min-h-screen flex flex-col ${isAttacking ? 'animate-shake' : ''}`}>
-
-        {/* Top bar */}
-        <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/[0.06] bg-black/70" style={{ backdropFilter: 'blur(16px)' }}>
-          <div className="flex items-center gap-3">
-            <img src="/gun.png" alt="" className="w-6 h-6 object-contain" style={{ filter: 'brightness(1.5)' }} />
-            <span className="text-xs font-mono font-bold text-green-400/80 tracking-[0.15em]">GALATICBLAST</span>
-            <span className="text-[9px] font-mono text-gray-600 border border-white/10 px-1.5 py-0.5 rounded">v1.0</span>
+        <div className="topbar-right">
+          <div className={`connection-chip ${connected ? 'is-online' : 'is-offline'}`}>
+            <i />
+            <span>{connected ? 'CORE ONLINE' : 'CORE OFFLINE'}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-white/[0.06]">
-              <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-400' : 'bg-red-500'}`} />
-              <span className={`text-[10px] font-mono ${connected ? 'text-green-400/80' : 'text-red-500/80'}`}>
-                {connected ? 'ONLINE' : 'OFFLINE'}
-              </span>
-            </div>
-            <button onClick={openSettings}
-              className="p-2 rounded border border-white/[0.06] hover:border-white/20 hover:bg-white/[0.03] transition-all duration-200 active:scale-95"
-              title="Settings">
-              <Settings className="w-3.5 h-3.5 text-gray-400" />
-            </button>
+          <span className="version-tag">BUILD 1.0.0</span>
+          <button className="icon-button" onClick={() => setSoundEnabled((enabled) => !enabled)} title={`${soundEnabled ? 'Disable' : 'Enable'} Galick Gun launch sound`} aria-label={`${soundEnabled ? 'Disable' : 'Enable'} launch sound`}>
+            {soundEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
+          </button>
+          <button className="icon-button" onClick={openSettings} title="Open configuration" aria-label="Open configuration">
+            <Settings size={17} />
+          </button>
+        </div>
+      </header>
+
+      <main className="dashboard">
+        <section className="hero-panel">
+          <img src="/gun.png" alt="Vegeta charging a violet Galick Gun beside a cosmic energy cannon" />
+          <div className="hero-vignette" />
+          <div className="hero-copy">
+            <div className="eyebrow"><span /> AUTHORIZED SAIYAN TEST ENVIRONMENT</div>
+            <h1>CHARGE THE<br /><em>GALICK GUN.</em></h1>
+            <p>Prince-level load orchestration for infrastructure you own or have explicit permission to test.</p>
           </div>
-        </header>
+          <div className="hero-readout">
+            <span>GALICK CORE</span>
+            <strong>{isLaunching ? 'SYNCING' : isAttacking ? 'ARMED' : 'STANDBY'}</strong>
+            <div className="signal-bars" aria-hidden="true">
+              {[1, 2, 3, 4, 5].map((bar) => <i key={bar} />)}
+            </div>
+          </div>
+          <div className="hero-index">GG // ELITE</div>
+        </section>
 
-        {/* Content */}
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-6">
-          <div className="w-full max-w-2xl space-y-4">
+        <section className="method-strip" aria-label="Test method">
+          {ATTACK_METHODS.map((method, index) => {
+            const Icon = method.icon
+            const active = attackMethod === method.value
+            return (
+              <button
+                key={method.value}
+                className={`method-card ${active ? 'is-active' : ''}`}
+                onClick={() => !isAttacking && !isLaunching && setAttackMethod(method.value)}
+                disabled={isAttacking || isLaunching}
+                style={{ '--method-color': method.color } as CSSProperties}
+              >
+                <span className="method-number">0{index + 1}</span>
+                <span className="method-icon"><Icon size={18} /></span>
+                <span className="method-copy"><strong>{method.label}</strong><small>{method.detail}</small></span>
+                <span className="method-layer">{method.short}</span>
+              </button>
+            )
+          })}
+        </section>
 
-            {/* Hero image + title */}
-            <div className="relative flex flex-col items-center mb-2">
-              <div className="relative mb-3">
-                <img src="/gun.png" alt="GalaticBlast" className="w-32 h-32 object-contain relative z-10"
-                  style={{
-                    filter: `drop-shadow(0 0 40px ${selectedMethod.color}30) drop-shadow(0 0 80px ${selectedMethod.color}15)`,
-                    transition: 'filter 0.5s ease',
-                  }} />
-                {isAttacking && (
-                  <div className="absolute inset-0 flex items-center justify-center z-20">
-                    <div className="w-40 h-40 rounded-full border opacity-20 animate-ping"
-                      style={{ borderColor: selectedMethod.color }} />
-                  </div>
-                )}
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-black tracking-[-0.02em] bg-gradient-to-r from-green-400 via-cyan-400 to-purple-500 bg-clip-text text-transparent">
-                GALATICBLAST
-              </h1>
-              <p className="text-[10px] font-mono text-gray-600 tracking-[0.3em] mt-1">NETWORK STRESS TESTING TOOL</p>
+        <div className="workspace-grid">
+          <section className="panel control-panel">
+            <div className="panel-heading">
+              <div><span className="section-index">01</span><h2>GALICK CONTROL</h2></div>
+              <span className="panel-meta">PROFILE / {selectedMethod.label.toUpperCase()}</span>
             </div>
 
-            {/* Target input */}
-            <div className="relative group">
-              <div className="flex items-stretch bg-[#08080f] rounded-lg border border-white/[0.08] overflow-hidden transition-all duration-200 focus-within:border-green-400/30">
-                <div className="flex items-center px-3 border-r border-white/[0.06] bg-white/[0.02]">
-                  <Crosshair className="w-4 h-4 text-green-400/60" />
-                </div>
-                <input type="text" value={target} onChange={(e) => setTarget(e.target.value)}
-                  placeholder="http://target.com or ip:port"
-                  className="flex-1 px-3 py-3 bg-transparent text-green-400 font-mono text-sm placeholder-gray-700 focus:outline-none" />
-                <div className="flex items-center px-3 border-l border-white/[0.06] bg-white/[0.02]">
-                  <span className="text-[9px] font-mono text-gray-700">{attackMethod.startsWith('http') ? 'L7' : 'L4'}</span>
-                </div>
-              </div>
+            <label className="field-label" htmlFor="target">TARGET ENDPOINT</label>
+            <div className="target-field">
+              <Crosshair size={18} />
+              <input
+                id="target"
+                type="text"
+                value={target}
+                onChange={(event) => setTarget(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') startAttack() }}
+                placeholder="https://authorized-target.test or host:port"
+                disabled={isAttacking || isLaunching}
+                autoComplete="off"
+              />
+              <span>{selectedMethod.short}</span>
             </div>
 
-            {/* Attack method buttons */}
-            <div className="grid grid-cols-5 gap-1.5">
-              {ATTACK_METHODS.map((method) => {
-                const Icon = method.icon
-                const isActive = attackMethod === method.value
-                return (
-                  <button key={method.value} onClick={() => setAttackMethod(method.value)}
-                    className="relative flex flex-col items-center gap-1.5 py-3 px-1 rounded-lg border transition-all duration-200 active:scale-95"
-                    style={{
-                      background: isActive ? `${method.color}15` : 'rgba(8,8,15,0.8)',
-                      borderColor: isActive ? `${method.color}40` : 'rgba(255,255,255,0.06)',
-                      boxShadow: isActive ? `0 0 20px ${method.color}10, inset 0 0 20px ${method.color}05` : 'none',
-                    }}>
-                    <Icon className="w-4 h-4" style={{ color: isActive ? method.color : '#4a4a5a' }} />
-                    <span className="text-[9px] font-mono font-bold tracking-wider"
-                      style={{ color: isActive ? method.color : '#6a6a7a' }}>
-                      {method.label}
-                    </span>
-                    {isActive && (
-                      <div className="absolute -bottom-[1px] left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full"
-                        style={{ background: method.color, boxShadow: `0 0 8px ${method.color}60` }} />
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Parameters */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="parameter-grid">
               {[
-                { label: 'SIZE', value: packetSize, set: setPacketSize, icon: Layers, unit: 'B' },
-                { label: 'DURATION', value: duration, set: setDuration, icon: Clock, unit: 's' },
-                { label: 'DELAY', value: packetDelay, set: setPacketDelay, icon: Activity, unit: 'ms' },
-                { label: 'THREADS', value: threads, set: setThreads, icon: Cpu, unit: '' },
-              ].map(({ label, value, set, icon: Icon, unit }) => (
-                <div key={label} className="bg-[#08080f] rounded-lg border border-white/[0.06] p-2.5 group focus-within:border-white/20 transition-all">
-                  <div className="flex items-center gap-1 mb-1.5">
-                    <Icon className="w-3 h-3 text-gray-700" />
-                    <span className="text-[8px] font-mono text-gray-700 tracking-wider">{label}</span>
-                  </div>
-                  <div className="flex items-baseline">
-                    <input type="number" value={value} onChange={(e) => set(Number(e.target.value))}
-                      className="w-full bg-transparent text-white font-mono font-bold text-base focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                    {unit && <span className="text-[9px] font-mono text-gray-600 ml-0.5">{unit}</span>}
-                  </div>
-                </div>
+                { label: 'PACKET SIZE', value: packetSize, setValue: setPacketSize, icon: Layers3, unit: 'BYTES', min: 1 },
+                { label: 'DURATION', value: duration, setValue: setDuration, icon: Clock3, unit: 'SECONDS', min: 1 },
+                { label: 'PACKET DELAY', value: packetDelay, setValue: setPacketDelay, icon: Gauge, unit: 'MS', min: 1 },
+                { label: 'WORKERS', value: threads, setValue: setThreads, icon: Cpu, unit: 'THREADS', min: 1 },
+              ].map(({ label, value, setValue, icon: Icon, unit, min }) => (
+                <label className="parameter-card" key={label}>
+                  <span><Icon size={14} /> {label}</span>
+                  <div><input type="number" min={min} value={value} onChange={(event) => setValue(Math.max(min, Number(event.target.value)))} disabled={isAttacking || isLaunching} /><small>{unit}</small></div>
+                </label>
               ))}
             </div>
 
-            {/* Action button */}
-            <button onClick={isAttacking ? stopAttack : startAttack}
-              disabled={!isAttacking && (!target || !connected)}
-              className="w-full relative overflow-hidden rounded-lg py-3.5 font-mono font-bold text-xs tracking-[0.25em] transition-all duration-300 disabled:opacity-20 disabled:cursor-not-allowed active:scale-[0.99] border"
-              style={isAttacking ? {
-                background: `${selectedMethod.color}15`,
-                borderColor: `${selectedMethod.color}50`,
-                color: selectedMethod.color,
-                boxShadow: `0 0 40px ${selectedMethod.color}15`,
-              } : {
-                background: 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(6,182,212,0.08))',
-                borderColor: 'rgba(34,197,94,0.25)',
-                color: '#4ade80',
-              }}>
-              <div className="flex items-center justify-center gap-2.5">
-                {isAttacking ? (
-                  <>
-                    <Square className="w-4 h-4" fill="currentColor" />
-                    <span>ABORT</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4" fill="currentColor" />
-                    <span>EXECUTE</span>
-                  </>
-                )}
-              </div>
-              {isAttacking && <div className="absolute inset-0 bg-white/[0.03] animate-pulse pointer-events-none" />}
+            <div className="authorization-note">
+              <Shield size={15} />
+              <span>Run tests only against systems you own or are explicitly authorized to assess.</span>
+            </div>
+
+            <button className={`launch-button ${isAttacking ? 'is-running' : ''}`} onClick={isAttacking ? stopAttack : startAttack} disabled={isLaunching || (!isAttacking && (!target.trim() || !connected))}>
+              <span className="launch-icon">{isAttacking ? <Square size={16} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</span>
+              <span><small>{isLaunching ? 'CHARGING KI' : isAttacking ? 'SESSION ACTIVE' : 'POWER LEVEL READY'}</small><strong>{isLaunching ? 'GALICK GUN...' : isAttacking ? 'ABORT TEST' : 'FIRE GALICK GUN'}</strong></span>
+              <ChevronRight size={19} />
             </button>
+          </section>
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: 'PPS', value: stats.pps.toLocaleString(), color: '#06b6d4', bar: Math.min((stats.pps / 5000) * 100, 100) },
-                { label: 'TOTAL', value: stats.totalPackets.toLocaleString(), color: '#a855f7', bar: null },
-                { label: 'PROXIES', value: stats.proxies.toString(), color: '#ec4899', bar: null },
-              ].map(({ label, value, color, bar }) => (
-                <div key={label} className="bg-[#08080f] rounded-lg border border-white/[0.06] px-3 py-2.5">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[8px] font-mono text-gray-700 tracking-wider">{label}</span>
-                    <span className="text-[9px] font-mono font-bold tabular-nums" style={{ color }}>{value}</span>
-                  </div>
-                  {bar !== null && (
-                    <div className="h-0.5 bg-white/[0.04] rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-300" style={{ width: `${bar}%`, background: color, opacity: 0.6 }} />
-                    </div>
-                  )}
-                </div>
-              ))}
+          <aside className="panel telemetry-panel">
+            <div className="panel-heading">
+              <div><span className="section-index">02</span><h2>LIVE TELEMETRY</h2></div>
+              <span className={`live-indicator ${isAttacking ? 'is-live' : ''}`}><i /> {isAttacking ? 'LIVE' : 'IDLE'}</span>
             </div>
 
-            {/* Terminal log */}
-            <div className="bg-[#06060c] rounded-lg border border-white/[0.06] overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.06]">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 rounded-full bg-red-500/40" />
-                    <div className="w-2 h-2 rounded-full bg-yellow-500/40" />
-                    <div className="w-2 h-2 rounded-full bg-green-500/40" />
-                  </div>
-                  <span className="text-[9px] font-mono text-gray-600">galaticblast@terminal</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {isAttacking && <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
-                  <button onClick={resetStats} className="p-1 hover:bg-white/5 rounded transition-all" title="Clear logs">
-                    <RotateCcw className="w-3 h-3 text-gray-600" />
-                  </button>
-                </div>
-              </div>
-              <div className="p-3 h-32 overflow-y-auto font-mono text-[11px] leading-relaxed">
-                {attackLogs.length === 0 ? (
-                  <div className="text-green-400/20">
-                    <span className="text-green-400/30">$</span> awaiting commands...
-                  </div>
-                ) : (
-                  <>
-                    {attackLogs.map((log, i) => (
-                      <div key={i} className="text-green-400/60">
-                        <span className="text-green-400/25 mr-1">$</span>
-                        {log}
-                      </div>
-                    ))}
-                    <div ref={logEndRef} />
-                  </>
-                )}
+            <div className="primary-metric">
+              <span>OUTPUT RATE</span>
+              <strong>{stats.pps.toLocaleString()}</strong>
+              <small>PACKETS / SECOND</small>
+              <div className="metric-graph" aria-hidden="true">
+                {[24, 38, 30, 56, 44, 68, 53, 79, 62, 91, 72, 100].map((height, index) => (
+                  <i key={index} style={{ height: `${isAttacking ? height : 8}%` }} />
+                ))}
               </div>
             </div>
-          </div>
+
+            <div className="metric-row">
+              <div><Radio size={15} /><span>TOTAL SENT<small>PACKETS</small></span><strong>{stats.totalPackets.toLocaleString()}</strong></div>
+              <div><Wifi size={15} /><span>PROXY POOL<small>AVAILABLE</small></span><strong>{stats.proxies}</strong></div>
+              <div><Clock3 size={15} /><span>ELAPSED<small>MM:SS</small></span><strong>{formatElapsed(elapsed)}</strong></div>
+            </div>
+
+            <div className="session-progress">
+              <div><span>SESSION PROGRESS</span><strong>{Math.round(progress)}%</strong></div>
+              <div className="progress-track"><i style={{ width: `${progress}%` }} /></div>
+              <small>{isAttacking ? `${Math.max(duration - elapsed, 0)} seconds remaining` : 'Awaiting mission start'}</small>
+            </div>
+          </aside>
         </div>
 
-        {/* Footer */}
-        <footer className="px-6 py-2 border-t border-white/[0.04] text-center">
-          <span className="text-[9px] font-mono text-gray-700">GALATICBLAST v1.0.0 // Educational Network Stress Testing</span>
-        </footer>
-      </div>
+        <section className="panel terminal-panel">
+          <div className="terminal-bar">
+            <div><Terminal size={15} /><strong>SCOUTER LOG</strong><span>galickgun@vegeta:~</span></div>
+            <button onClick={resetStats} title="Clear telemetry and logs"><RotateCcw size={14} /> CLEAR</button>
+          </div>
+          <div className="terminal-output" role="log" aria-live="polite">
+            {attackLogs.length === 0 ? (
+              <p className="terminal-empty"><span>›</span> Galick core ready. Configure a target to begin an authorized test.<i /></p>
+            ) : attackLogs.map((log, index) => (
+              <p key={`${index}-${log}`}><time>{new Date().toLocaleTimeString([], { hour12: false })}</time><span>›</span>{log}</p>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+        </section>
+      </main>
 
-      {/* Settings Modal */}
+      <footer className="footer">
+        <span>GALICKGUN // DARKSECLABS</span>
+        <span>AUTHORIZED SAIYAN NETWORK TESTING CONSOLE</span>
+        <span>CORE STATUS: <b className={connected ? 'online' : ''}>{connected ? 'NOMINAL' : 'DISCONNECTED'}</b></span>
+      </footer>
+
       {showSettings && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4"
-          style={{ backdropFilter: 'blur(8px)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowSettings(false) }}>
-          <div className="bg-[#0a0a10] rounded-xl border border-white/[0.08] w-full max-w-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}>
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
-              <div className="flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-green-400/70" />
-                <h2 className="text-xs font-mono font-bold text-green-400/80 tracking-[0.15em]">CONFIGURATION</h2>
-              </div>
-              <button onClick={() => setShowSettings(false)}
-                className="p-1.5 rounded hover:bg-white/5 transition-all active:scale-90">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowSettings(false) }}>
+          <div className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+            <div className="modal-header">
+              <div><span><Settings size={18} /></span><div><small>SYSTEM</small><h2 id="settings-title">CONFIGURATION</h2></div></div>
+              <button onClick={() => setShowSettings(false)} aria-label="Close configuration"><X size={18} /></button>
             </div>
-
-            {/* Modal body */}
-            <div className="p-5 space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-[9px] font-mono text-gray-600 tracking-[0.2em]">PROXIES</label>
-                  <span className="text-[9px] font-mono text-gray-700">{proxies.split('\n').filter(l => l.trim() && !l.startsWith('#')).length} loaded</span>
-                </div>
-                <textarea value={proxies} onChange={(e) => setProxies(e.target.value)} rows={5}
-                  className="w-full px-3 py-2.5 bg-[#06060c] border border-white/[0.06] rounded-lg text-green-400/70 font-mono text-[11px] focus:outline-none focus:border-green-400/20 resize-none placeholder-gray-800 transition-all"
-                  placeholder={"http://proxy1:8080\nsocks5://proxy2:1080\n# one proxy per line"} />
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-[9px] font-mono text-gray-600 tracking-[0.2em]">USER AGENTS</label>
-                  <span className="text-[9px] font-mono text-gray-700">{uas.split('\n').filter(l => l.trim() && !l.startsWith('#')).length} loaded</span>
-                </div>
-                <textarea value={uas} onChange={(e) => setUas(e.target.value)} rows={5}
-                  className="w-full px-3 py-2.5 bg-[#06060c] border border-white/[0.06] rounded-lg text-green-400/70 font-mono text-[11px] focus:outline-none focus:border-green-400/20 resize-none placeholder-gray-800 transition-all"
-                  placeholder={"Mozilla/5.0 (Windows NT 10.0; Win64; x64)...\n# one user agent per line"} />
-              </div>
+            <div className="modal-body">
+              <label className="config-field">
+                <span><strong>PROXY POOL</strong><small>{proxyCount} VALID ENTRIES</small></span>
+                <textarea value={proxies} onChange={(event) => setProxies(event.target.value)} rows={7} placeholder={'http://proxy1:8080\nsocks5://proxy2:1080\n# one proxy per line'} />
+              </label>
+              <label className="config-field">
+                <span><strong>USER AGENT ROTATION</strong><small>{userAgentCount} VALID ENTRIES</small></span>
+                <textarea value={uas} onChange={(event) => setUas(event.target.value)} rows={7} placeholder={'Mozilla/5.0 (Windows NT 10.0; Win64; x64)...\n# one user agent per line'} />
+              </label>
             </div>
-
-            {/* Modal footer */}
-            <div className="flex items-center gap-3 px-5 pb-5">
-              <button onClick={saveConfiguration}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-mono font-bold text-[11px] tracking-wider transition-all duration-200 active:scale-[0.98] border"
-                style={settingsSaved ? {
-                  background: 'rgba(34,197,94,0.15)',
-                  borderColor: 'rgba(34,197,94,0.4)',
-                  color: '#4ade80',
-                } : {
-                  background: 'rgba(34,197,94,0.08)',
-                  borderColor: 'rgba(34,197,94,0.2)',
-                  color: '#4ade80',
-                }}>
-                <Save className="w-3.5 h-3.5" />
-                {settingsSaved ? 'SAVED!' : 'SAVE'}
-              </button>
-              <button onClick={() => setShowSettings(false)}
-                className="px-4 py-2.5 rounded-lg border border-white/[0.08] text-gray-500 font-mono text-[11px] hover:bg-white/[0.03] transition-all active:scale-[0.98]">
-                CANCEL
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setShowSettings(false)}>CANCEL</button>
+              <button className={`save-button ${settingsSaved ? 'is-saved' : ''}`} onClick={saveConfiguration}>
+                {settingsSaved ? <Check size={16} /> : <Save size={16} />}{settingsSaved ? 'CONFIGURATION SAVED' : 'SAVE CONFIGURATION'}
               </button>
             </div>
           </div>

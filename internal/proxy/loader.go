@@ -60,8 +60,8 @@ func parseProxyLine(line string) engine.Proxy {
 	portStr := "80"
 
 	if colonIdx := strings.LastIndex(hostPart, ":"); colonIdx != -1 {
-		hostPart = hostPart[:colonIdx]
 		portStr = hostPart[colonIdx+1:]
+		hostPart = hostPart[:colonIdx]
 	}
 
 	proxy.Host = hostPart

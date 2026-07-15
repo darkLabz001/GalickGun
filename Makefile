@@ -1,20 +1,28 @@
-.PHONY: all build server cli webclient clean prepare
+.PHONY: all build server cli webclient test vet check clean prepare
 
 all: prepare build
 
 prepare:
-	cd web-client && npm install
+	cd web-client && npm ci
 
 build: server cli webclient
 
 server:
-	go build -o bin/gb-server ./cmd/gb-server
+	go build -o bin/galickgun-server ./cmd/gb-server
 
 cli:
-	go build -o bin/gb-cli ./cmd/gb-cli
+	go build -o bin/galickgun-cli ./cmd/gb-cli
 
 webclient:
 	cd web-client && npm run build
+
+test:
+	go test -race ./...
+
+vet:
+	go vet ./...
+
+check: test vet build
 
 clean:
 	rm -rf bin/ web-client/dist/ web-client/node_modules/

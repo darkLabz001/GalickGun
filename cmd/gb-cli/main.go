@@ -14,6 +14,7 @@ import (
 	"github.com/galaticBlast/galaticBlast/internal/config"
 	"github.com/galaticBlast/galaticBlast/internal/engine"
 	"github.com/galaticBlast/galaticBlast/internal/proxy"
+	"github.com/galaticBlast/galaticBlast/pkg/api"
 	"github.com/galaticBlast/galaticBlast/pkg/target"
 	"github.com/spf13/cobra"
 )
@@ -31,13 +32,13 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "gb-cli",
-		Short: "GalaticBlast CLI - Network Stress Testing Tool",
+		Use:   "galickgun-cli",
+		Short: "GalickGun CLI - Authorized Network Load Testing Tool",
 	}
 
 	attackCmd := &cobra.Command{
 		Use:   "attack [method] [target]",
-		Short: "Launch an attack",
+		Short: "Run an authorized load test",
 		Args:  cobra.ExactArgs(2),
 		RunE:  runAttack,
 	}
@@ -59,6 +60,17 @@ func main() {
 func runAttack(cmd *cobra.Command, args []string) error {
 	attackMethod = args[0]
 	targetStr = args[1]
+	request := api.StartAttackRequest{
+		Target:       targetStr,
+		AttackMethod: attackMethod,
+		DurationSec:  duration,
+		PacketDelay:  packetDelay,
+		PacketSize:   packetSize,
+		Threads:      threads,
+	}
+	if err := api.ValidateStartAttackRequest(request); err != nil {
+		return fmt.Errorf("invalid attack parameters: %w", err)
+	}
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -77,7 +89,7 @@ func runAttack(cmd *cobra.Command, args []string) error {
 	userAgents, err := proxy.LoadUserAgents(cfg.UserAgentsFile)
 	if err != nil {
 		fmt.Printf("Warning: Could not load user agents: %v\n", err)
-		userAgents = []string{"GalaticBlast/1.0"}
+		userAgents = []string{"GalickGun/1.0"}
 	}
 
 	method := engine.AttackKind(attackMethod)
@@ -110,7 +122,7 @@ func runAttack(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start attack")
 	}
 
-	fmt.Printf("GalaticBlast - Attack Started\n")
+	fmt.Printf("GalickGun - Test Started\n")
 	fmt.Printf("Method: %s\n", attackMethod)
 	fmt.Printf("Target: %s\n", targetStr)
 	fmt.Printf("Duration: %ds\n", duration)

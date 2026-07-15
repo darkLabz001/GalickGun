@@ -1,4 +1,4 @@
-# GalaticBlast Sample Proxies
+# GalickGun Sample Proxies
 # Format: protocol://host:port
 # Supported protocols: http, https, socks4, socks5
 

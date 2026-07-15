@@ -1,4 +1,4 @@
-import { io, Socket } from 'socket.io-client'
+import io from 'socket.io-client'
 
 export type StartAttackPayload = {
   target: string
@@ -17,19 +17,24 @@ export type StatsMessage = {
   timestamp: number
 }
 
+export type AttackAcceptedMessage = {
+  ok: boolean
+  proxies: number
+  message?: string
+}
+
 export class MMBClient {
-  private socket: Socket
+  private socket: SocketIOClient.Socket
 
   constructor() {
-    const url = window.location.protocol + '//' + window.location.hostname + ':3000'
-    this.socket = io(url, {
-      transports: ['websocket', 'polling'],
+    this.socket = io(window.location.origin, {
+      forceNew: true,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
     })
 
-    this.socket.on('connect_error', (err) => {
+    this.socket.on('connect_error', (err: Error) => {
       console.error('Socket connection error:', err.message)
     })
   }
@@ -48,6 +53,10 @@ export class MMBClient {
 
   onAttackEnd(callback: () => void) {
     this.socket.on('attackEnd', callback)
+  }
+
+  onAttackAccepted(callback: (data: AttackAcceptedMessage) => void) {
+    this.socket.on('attackAccepted', callback)
   }
 
   startAttack(payload: StartAttackPayload) {
